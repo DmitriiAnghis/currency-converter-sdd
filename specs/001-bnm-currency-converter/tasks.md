@@ -21,14 +21,14 @@ phases.
 
 **Purpose**: Establish the package, dependency declaration, and shared test data.
 
-- [ ] T001 [P] Configure Python 3.12 packaging, `httpx` runtime dependency, pytest test dependency, and `src` package discovery in `pyproject.toml`
-- [ ] T002 [P] Create the importable package initializer in `src/converter/__init__.py`
+- [x] T001 [P] Configure Python 3.12 packaging, `httpx` runtime dependency, pytest test dependency, and `src` package discovery in `pyproject.toml`
+- [x] T002 [P] Create the importable package initializer in `src/converter/__init__.py`
 
 ## Phase 2: Foundational
 
 **Purpose**: Provide deterministic BNM input data shared by parser and service tests.
 
-- [ ] T003 Add a representative BNM XML fixture with EUR and a non-unit nominal currency to `tests/fixtures/bnm_rates.xml`
+- [x] T003 Add a representative BNM XML fixture with EUR and a non-unit nominal currency to `tests/fixtures/bnm_rates.xml`
 
 **Checkpoint**: Setup and shared fixture are ready; user-story work can begin.
 
