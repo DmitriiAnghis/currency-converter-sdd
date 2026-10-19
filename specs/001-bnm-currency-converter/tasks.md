@@ -114,14 +114,14 @@ offline offer/decline/accept behavior, and cache date/provenance reporting.
 
 ### Tests for User Story 3
 
-- [ ] T020 [P] [US3] Test JSON cache round-trip, decimal-string precision, schema/date/value validation, missing-file behavior, and read/write errors in `tests/test_cache.py`
-- [ ] T021 [US3] Add service tests for saving only successful responses, offline with and without cache, explicit cached-rate acceptance, and preserving the cached effective date in `tests/test_rates_service.py`
+- [x] T020 [P] [US3] Test JSON cache round-trip, decimal-string precision, schema/date/value validation, missing-file behavior, and read/write errors in `tests/test_cache.py`
+- [x] T021 [US3] Add service tests for saving only successful responses, offline with and without cache, explicit cached-rate acceptance, and preserving the cached effective date in `tests/test_rates_service.py`
 
 ### Implementation for User Story 3
 
-- [ ] T022 [US3] Implement the versioned JSON cache and user-data path resolution in `src/converter/cache.py`; require `schema_version`, ISO effective `date`, and currency `code`, `name`, `nominal`, and `value_mdl` fields; enforce unique codes, positive integer nominal, and positive finite values; serialize decimals as strings to preserve precision; treat missing cache as a miss and report invalid/unreadable files without using them
-- [ ] T023 [US3] Integrate cache persistence and explicit offline choice in `src/converter/rates_service.py`; save only valid successful online rates and offer, but do not automatically use, the last successful cache after source unavailability
-- [ ] T024 [US3] Update `src/converter/gui.py` to show source-unavailable errors, prompt to accept or decline cached rates with their date, and label accepted results `cache from DD.MM.YYYY`
+- [x] T022 [US3] Implement the versioned JSON cache and user-data path resolution in `src/converter/cache.py`; require `schema_version`, ISO effective `date`, and currency `code`, `name`, `nominal`, and `value_mdl` fields; enforce unique codes, positive integer nominal, and positive finite values; serialize decimals as strings to preserve precision; treat missing cache as a miss and report invalid/unreadable files without using them
+- [x] T023 [US3] Integrate cache persistence and explicit offline choice in `src/converter/rates_service.py`; save only valid successful online rates and offer, but do not automatically use, the last successful cache after source unavailability
+- [x] T024 [US3] Update `src/converter/gui.py` to show source-unavailable errors, prompt to accept or decline cached rates with their date, and label accepted results `cache from DD.MM.YYYY`
 
 **Checkpoint**: With no network, the app remains usable; cached data is offered only with clear
 user consent and is always identified by its actual date.

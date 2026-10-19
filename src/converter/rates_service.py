@@ -119,3 +119,24 @@ class RatesService:
         raise NoRatesFoundError(
             f"No rates found for {target_date.strftime('%d.%m.%Y')} or the 10-day lookback period."
         )
+
+    def get_cached_rates(self) -> Optional[RatesResult]:
+        """Return the last successful cached rate set as RatesResult, or None."""
+        if self.cache is None:
+            return None
+
+        try:
+            rate_set = self.cache.load()
+        except Exception:
+            return None
+
+        if rate_set is None:
+            return None
+
+        return RatesResult(
+            rates=rate_set,
+            date=rate_set.date,
+            source="cache",
+            is_cached=True,
+            notice=rate_set.notice,
+        )

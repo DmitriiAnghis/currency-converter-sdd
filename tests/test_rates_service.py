@@ -227,3 +227,88 @@ def test_rates_service_stops_on_source_unavailable_during_fallback():
         service.get_rates(start_date)
 
     assert fake_client.requested_dates == [start_date, day_1_earlier]
+
+
+# User Story 3: Cache integration tests (T021)
+
+
+class FakeCache:
+    def __init__(self, initial_rate_set=None):
+        self.saved_rate_set = None
+        self.current_rate_set = initial_rate_set
+        self.save_called = False
+
+    def save(self, rate_set: RateSet) -> None:
+        self.saved_rate_set = rate_set
+        self.current_rate_set = rate_set
+        self.save_called = True
+
+    def load(self) -> Optional[RateSet]:
+        return self.current_rate_set
+
+
+def test_rates_service_saves_only_successful_responses():
+    req_date = date(2026, 10, 19)
+    valid_xml = f"""<?xml version="1.0" encoding="utf-8"?>
+    <ValCurs Date="19.10.2026" name="Official exchange rate">
+        <Valute ID="47"><CharCode>EUR</CharCode><Nominal>1</Nominal><Name>Euro</Name><Value>19.4523</Value></Valute>
+    </ValCurs>"""
+
+    fake_client = FakeBnmClient({req_date: valid_xml})
+    fake_cache = FakeCache()
+    service = RatesService(client=fake_client, cache=fake_cache)
+
+    service.get_rates(req_date)
+    assert fake_cache.save_called is True
+    assert fake_cache.saved_rate_set is not None
+    assert fake_cache.saved_rate_set.date == req_date
+
+    # Now verify failed fetch does NOT overwrite cache
+    fake_cache.save_called = False
+    fake_client2 = FakeBnmClient({req_date: SourceUnavailableError("Down")})
+    service2 = RatesService(client=fake_client2, cache=fake_cache)
+
+    with pytest.raises(SourceUnavailableError):
+        service2.get_rates(req_date)
+
+    assert fake_cache.save_called is False
+
+
+def test_rates_service_offline_without_cache():
+    req_date = date(2026, 10, 19)
+    fake_client = FakeBnmClient({req_date: SourceUnavailableError("No connection")})
+    fake_cache = FakeCache(initial_rate_set=None)
+    service = RatesService(client=fake_client, cache=fake_cache)
+
+    with pytest.raises(SourceUnavailableError):
+        service.get_rates(req_date)
+
+    assert service.get_cached_rates() is None
+
+
+def test_rates_service_offline_with_cache_offers_cached_rates():
+    req_date = date(2026, 10, 19)
+    cached_date = date(2026, 10, 15)
+    cached_rates = {
+        "MDL": Currency(code="MDL", name="Moldovan Leu", nominal=1, value_mdl=Decimal("1")),
+        "EUR": Currency(code="EUR", name="Euro", nominal=1, value_mdl=Decimal("19.4000")),
+    }
+    cached_rate_set = RateSet(date=cached_date, currencies=cached_rates, source="cache", is_cached=True)
+
+    fake_client = FakeBnmClient({req_date: SourceUnavailableError("No network")})
+    fake_cache = FakeCache(initial_rate_set=cached_rate_set)
+    service = RatesService(client=fake_client, cache=fake_cache)
+
+    # get_rates raises SourceUnavailableError (does not silently use cache)
+    with pytest.raises(SourceUnavailableError):
+        service.get_rates(req_date)
+
+    # get_cached_rates offers the saved rates with actual cached date
+    cached_result = service.get_cached_rates()
+    assert cached_result is not None
+    assert isinstance(cached_result, RatesResult)
+    assert cached_result.date == cached_date
+    assert cached_result.source == "cache"
+    assert cached_result.is_cached is True
+    assert cached_result.provenance_label == "cache from 15.10.2026"
+    assert "EUR" in cached_result.rates.currencies

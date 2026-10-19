@@ -163,3 +163,97 @@ def test_gui_reports_lookback_exhaustion_without_conversion(tk_session_root):
         assert app.result_main_var.get() == ""
     finally:
         win.destroy()
+
+
+def test_gui_source_unavailable_offers_cache_and_accept(tk_session_root):
+    from converter.bnm_client import SourceUnavailableError
+
+    cached_rates = {
+        "MDL": Currency(code="MDL", name="Moldovan Leu", nominal=1, value_mdl=Decimal("1")),
+        "EUR": Currency(code="EUR", name="Euro", nominal=1, value_mdl=Decimal("19.3000")),
+    }
+    cached_set = RateSet(date=date(2026, 10, 15), currencies=cached_rates, source="cache", is_cached=True)
+
+    class OfflineFakeCache:
+        def load(self):
+            return cached_set
+
+    class OfflineService:
+        cache = OfflineFakeCache()
+
+        def get_rates(self, target_date: date):
+            raise SourceUnavailableError("Cannot connect to BNM server")
+
+    win = tk.Toplevel(tk_session_root)
+    try:
+        app = ConverterApp(win, rates_service=OfflineService())
+        app.amount_var.set("100")
+        app.from_currency_var.set("EUR")
+        app.to_currency_var.set("MDL")
+        app.date_var.set("19.10.2026")
+
+        app._on_convert_clicked()
+
+        for _ in range(20):
+            win.update()
+            if "15.10.2026" in app.cache_prompt_label.cget("text"):
+                break
+            time.sleep(0.05)
+
+        # Cache offer is shown
+        assert "15.10.2026" in app.cache_prompt_label.cget("text")
+        assert app.result_main_var.get() == ""
+
+        # Accept cache
+        app._on_accept_cache()
+        win.update()
+
+        assert "100 EUR = 1930.00 MDL" == app.result_main_var.get()
+        assert "cache from 15.10.2026" == app.result_provenance_var.get()
+    finally:
+        win.destroy()
+
+
+def test_gui_source_unavailable_declining_cache(tk_session_root):
+    from converter.bnm_client import SourceUnavailableError
+
+    cached_rates = {
+        "MDL": Currency(code="MDL", name="Moldovan Leu", nominal=1, value_mdl=Decimal("1")),
+        "EUR": Currency(code="EUR", name="Euro", nominal=1, value_mdl=Decimal("19.3000")),
+    }
+    cached_set = RateSet(date=date(2026, 10, 15), currencies=cached_rates, source="cache", is_cached=True)
+
+    class OfflineFakeCache:
+        def load(self):
+            return cached_set
+
+    class OfflineService:
+        cache = OfflineFakeCache()
+
+        def get_rates(self, target_date: date):
+            raise SourceUnavailableError("Cannot connect to BNM server")
+
+    win = tk.Toplevel(tk_session_root)
+    try:
+        app = ConverterApp(win, rates_service=OfflineService())
+        app.amount_var.set("100")
+        app.from_currency_var.set("EUR")
+        app.to_currency_var.set("MDL")
+        app.date_var.set("19.10.2026")
+
+        app._on_convert_clicked()
+
+        for _ in range(20):
+            win.update()
+            if "15.10.2026" in app.cache_prompt_label.cget("text"):
+                break
+            time.sleep(0.05)
+
+        # Decline cache
+        app._on_decline_cache()
+        win.update()
+
+        assert "declined" in app.validation_error_var.get()
+        assert app.result_main_var.get() == ""
+    finally:
+        win.destroy()
