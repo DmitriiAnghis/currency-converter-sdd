@@ -43,12 +43,12 @@ enables conversion only after all required fields are filled.
 
 ### Tests for User Story 4
 
-- [ ] T004 [US4] Write `Decimal` parsing tests for empty, zero, negative, alphabetic, malformed, comma-decimal, and period-decimal inputs in `tests/test_validation.py`
+- [x] T004 [US4] Write `Decimal` parsing tests for empty, zero, negative, alphabetic, malformed, comma-decimal, and period-decimal inputs in `tests/test_validation.py`
 
 ### Implementation for User Story 4
 
-- [ ] T005 [US4] Implement `parse_amount` and `ValidationError` in `src/converter/validation.py`; accept a positive decimal using one comma or period and reject empty, zero, negative, mixed-separator, multiple-separator, and non-numeric input
-- [ ] T006 [US4] Build the initial amount field, currency selectors, disabled-until-complete Convert button, and visible validation feedback using `parse_amount` in `src/converter/gui.py`
+- [x] T005 [US4] Implement `parse_amount` and `ValidationError` in `src/converter/validation.py`; accept a positive decimal using one comma or period and reject empty, zero, negative, mixed-separator, multiple-separator, and non-numeric input
+- [x] T006 [US4] Build the initial amount field, currency selectors, disabled-until-complete Convert button, and visible validation feedback using `parse_amount` in `src/converter/gui.py`
 
 **Checkpoint**: Invalid amounts produce visible validation feedback and cannot produce a
 conversion; incomplete form fields keep Convert disabled.
