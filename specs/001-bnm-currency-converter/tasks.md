@@ -65,19 +65,19 @@ verify same-currency, MDL/EUR, EUR/USD, and nominal-quantity conversions. Launch
 
 ### Tests for User Story 1
 
-- [ ] T007 [P] [US1] Test BNM XML parsing, required fields, decimal precision, duplicate currency codes, empty response, and malformed XML in `tests/test_parser.py`
-- [ ] T008 [P] [US1] Test BNM request URL/date formatting, 10-second timeout, status handling, and transport failures with a fake HTTP client in `tests/test_bnm_client.py`
-- [ ] T009 [P] [US1] Test same-currency, MDL-to-EUR, EUR-to-MDL, EUR-to-USD in both directions, and nominal 10/100 arithmetic in `tests/test_converter.py`
-- [ ] T010 [US1] Test single-date rate retrieval, `RatesResult` date/provenance, and service handling of empty versus malformed responses with fake client and parser collaborators in `tests/test_rates_service.py`
+- [x] T007 [P] [US1] Test BNM XML parsing, required fields, decimal precision, duplicate currency codes, empty response, and malformed XML in `tests/test_parser.py`
+- [x] T008 [P] [US1] Test BNM request URL/date formatting, 10-second timeout, status handling, and transport failures with a fake HTTP client in `tests/test_bnm_client.py`
+- [x] T009 [P] [US1] Test same-currency, MDL-to-EUR, EUR-to-MDL, EUR-to-USD in both directions, and nominal 10/100 arithmetic in `tests/test_converter.py`
+- [x] T010 [US1] Test single-date rate retrieval, `RatesResult` date/provenance, and service handling of empty versus malformed responses with fake client and parser collaborators in `tests/test_rates_service.py`
 
 ### Implementation for User Story 1
 
-- [ ] T011 [US1] Implement the `Rate` data shape and XML parser in `src/converter/parser.py`; enforce `code`: "Required ISO-like BNM `CharCode`; unique within one rate set", `name`: "Required source name", `nominal`: "positive integer", and `value_mdl`: "Positive MDL value for `nominal` units", preserve source precision, and distinguish `EmptyResponse` from `InvalidResponse`
-- [ ] T012 [US1] Implement `BnmClient` in `src/converter/bnm_client.py` using the BNM `DD.MM.YYYY` URL, `httpx` timeout of 10 seconds, and distinct date-unavailable, source-unavailable, and invalid-status errors
-- [ ] T013 [US1] Implement `convert` in `src/converter/converter.py` using `Decimal`, requiring source and target codes to identify currencies in the selected rate set, `Value / Nominal` per-unit MDL rates, half-up rounding only on the final amount, and an unrounded reverse rate as source units per target unit
-- [ ] T014 [US1] Implement the initial one-date `RatesResult` flow in `src/converter/rates_service.py`, returning valid rates for the requested date and surfacing no-rate, source, and invalid-data outcomes distinctly
-- [ ] T015 [US1] Complete `src/converter/gui.py` with a Tkinter date selector defaulting to today, BNM currency choices ordered EUR/USD/RON/UAH/RUB/GBP first when present, background rate loading, conversion submission, result formatting, reverse-rate display to four decimals with half-up rounding, and actual BNM date/provenance display; on malformed source data show a clear error and suppress/clear the conversion result, and during a simulated 10-second request keep repainting and accept amount edits within 1 second
-- [ ] T016 [US1] Add the Tk application entry point without a console UI in `src/converter/__main__.py`
+- [x] T011 [US1] Implement the `Rate` data shape and XML parser in `src/converter/parser.py`; enforce `code`: "Required ISO-like BNM `CharCode`; unique within one rate set", `name`: "Required source name", `nominal`: "positive integer", and `value_mdl`: "Positive MDL value for `nominal` units", preserve source precision, and distinguish `EmptyResponse` from `InvalidResponse`
+- [x] T012 [US1] Implement `BnmClient` in `src/converter/bnm_client.py` using the BNM `DD.MM.YYYY` URL, `httpx` timeout of 10 seconds, and distinct date-unavailable, source-unavailable, and invalid-status errors
+- [x] T013 [US1] Implement `convert` in `src/converter/converter.py` using `Decimal`, requiring source and target codes to identify currencies in the selected rate set, `Value / Nominal` per-unit MDL rates, half-up rounding only on the final amount, and an unrounded reverse rate as source units per target unit
+- [x] T014 [US1] Implement the initial one-date `RatesResult` flow in `src/converter/rates_service.py`, returning valid rates for the requested date and surfacing no-rate, source, and invalid-data outcomes distinctly
+- [x] T015 [US1] Complete `src/converter/gui.py` with a Tkinter date selector defaulting to today, BNM currency choices ordered EUR/USD/RON/UAH/RUB/GBP first when present, background rate loading, conversion submission, result formatting, reverse-rate display to four decimals with half-up rounding, and actual BNM date/provenance display; on malformed source data show a clear error and suppress/clear the conversion result, and during a simulated 10-second request keep repainting and accept amount edits within 1 second
+- [x] T016 [US1] Add the Tk application entry point without a console UI in `src/converter/__main__.py`
 
 **Checkpoint**: The user can perform a valid online conversion and sees the actual BNM rate date
 and source; all currency-independent calculation and parsing behavior is covered by unit tests.

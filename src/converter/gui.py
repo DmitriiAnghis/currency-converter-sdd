@@ -1,15 +1,43 @@
 """Graphical user interface for BNM Currency Converter using Tkinter."""
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
+import os
+import queue
+import sys
+import threading
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import ttk
 from typing import Any, Callable, Optional
 
+# Ensure Tcl/Tk can locate their standard libraries if not set
+_tcl_dir = os.path.join(sys.prefix, "tcl", "tcl8.6")
+_tk_dir = os.path.join(sys.prefix, "tcl", "tk8.6")
+if "TCL_LIBRARY" not in os.environ and os.path.exists(_tcl_dir):
+    os.environ["TCL_LIBRARY"] = _tcl_dir
+if "TK_LIBRARY" not in os.environ and os.path.exists(_tk_dir):
+    os.environ["TK_LIBRARY"] = _tk_dir
+
+from converter.bnm_client import SourceUnavailableError
+from converter.converter import Conversion, convert
+from converter.parser import RateSet
+from converter.rates_service import (
+    InvalidDataError,
+    NoRatesFoundError,
+    RatesResult,
+    RatesService,
+)
 from converter.validation import ValidationError, parse_amount
 
 
 POPULAR_CURRENCIES = ["EUR", "USD", "RON", "UAH", "RUB", "GBP"]
+
+
+def order_currencies(currency_codes: list[str]) -> list[str]:
+    """Order currencies with EUR, USD, RON, UAH, RUB, GBP first, then others alphabetically."""
+    popular = [c for c in POPULAR_CURRENCIES if c in currency_codes]
+    others = sorted([c for c in currency_codes if c not in POPULAR_CURRENCIES])
+    return popular + others
 
 
 class ConverterApp:
@@ -18,21 +46,19 @@ class ConverterApp:
     def __init__(
         self,
         root: Optional[tk.Tk] = None,
-        rates_service: Optional[Any] = None,
-        converter: Optional[Any] = None,
+        rates_service: Optional[RatesService] = None,
     ) -> None:
         self.root = root if root is not None else tk.Tk()
         self.root.title("BNM Currency Converter")
-        self.root.geometry("520x640")
-        self.root.minsize(460, 580)
+        self.root.geometry("520x680")
+        self.root.minsize(460, 600)
 
         self.rates_service = rates_service
-        self.converter = converter
 
         # State variables
         self.amount_var = tk.StringVar()
-        self.from_currency_var = tk.StringVar()
-        self.to_currency_var = tk.StringVar()
+        self.from_currency_var = tk.StringVar(value="")
+        self.to_currency_var = tk.StringVar(value="")
         self.date_var = tk.StringVar(value=date.today().strftime("%d.%m.%Y"))
 
         self.status_message_var = tk.StringVar()
@@ -42,13 +68,38 @@ class ConverterApp:
         self.result_provenance_var = tk.StringVar()
         self.result_notice_var = tk.StringVar()
 
-        self.available_currencies: list[str] = ["MDL", "EUR", "USD", "RON", "UAH", "RUB", "GBP"]
-        self.current_rates_result = None
+        initial_defaults = ["EUR", "USD", "RON", "UAH", "RUB", "GBP", "MDL"]
+        self.available_currencies: list[str] = order_currencies(initial_defaults)
+        self.current_rates_result: Optional[RatesResult] = None
+        self._cached_rate_set_to_offer: Optional[RateSet] = None
+
+        self._queue: queue.Queue[Callable[[], None]] = queue.Queue()
 
         self._configure_styles()
         self._build_ui()
         self._bind_events()
         self._update_convert_button_state()
+        self._schedule_queue_processing()
+
+        if self.rates_service is not None:
+            self._load_initial_rates()
+
+    def _schedule_queue_processing(self) -> None:
+        self._process_queue()
+
+    def _process_queue(self) -> None:
+        while not self._queue.empty():
+            try:
+                fn = self._queue.get_nowait()
+                fn()
+            except queue.Empty:
+                break
+            except Exception:
+                pass
+        try:
+            self.root.after(50, self._process_queue)
+        except Exception:
+            pass
 
     def _configure_styles(self) -> None:
         style = ttk.Style(self.root)
@@ -57,7 +108,6 @@ class ConverterApp:
         except tk.TclError:
             pass
 
-        # Configure color palette
         self.root.configure(bg="#f1f5f9")  # Slate-100
 
         style.configure(".", font=("Segoe UI", 10), background="#f1f5f9", foreground="#0f172a")
@@ -85,6 +135,12 @@ class ConverterApp:
             "FieldLabel.TLabel",
             font=("Segoe UI", 9, "bold"),
             foreground="#334155",
+            background="#ffffff",
+        )
+        style.configure(
+            "Status.TLabel",
+            font=("Segoe UI", 9, "italic"),
+            foreground="#2563eb",
             background="#ffffff",
         )
         style.configure(
@@ -153,7 +209,7 @@ class ConverterApp:
 
         # Title & Subtitle
         header_frame = ttk.Frame(main_container)
-        header_frame.pack(fill=tk.X, pady=(0, 16))
+        header_frame.pack(fill=tk.X, pady=(0, 14))
 
         title_label = ttk.Label(header_frame, text="BNM Currency Converter", style="Header.TLabel")
         title_label.pack(anchor=tk.W)
@@ -221,7 +277,7 @@ class ConverterApp:
 
         # Date Selector
         date_frame = ttk.Frame(form_card, style="InnerCard.TFrame")
-        date_frame.pack(fill=tk.X, pady=(0, 14))
+        date_frame.pack(fill=tk.X, pady=(0, 12))
 
         ttk.Label(date_frame, text="RATE DATE (DD.MM.YYYY)", style="FieldLabel.TLabel").pack(
             anchor=tk.W, pady=(0, 4)
@@ -244,7 +300,16 @@ class ConverterApp:
         )
         today_btn.pack(side=tk.LEFT, padx=(6, 0))
 
-        # Validation message label
+        # Status / Loading message
+        self.status_label = ttk.Label(
+            form_card,
+            textvariable=self.status_message_var,
+            style="Status.TLabel",
+            wraplength=440,
+        )
+        self.status_label.pack(anchor=tk.W, pady=(0, 4))
+
+        # Validation / Error message
         self.validation_label = ttk.Label(
             form_card,
             textvariable=self.validation_error_var,
@@ -358,11 +423,36 @@ class ConverterApp:
         self.result_provenance_var.set("")
         self.result_notice_var.set("")
 
-    def _on_convert_clicked(self) -> None:
-        # Clear previous errors and results
-        self.validation_error_var.set("")
-        raw_amount = self.amount_var.get()
+    def _load_initial_rates(self) -> None:
+        """Fetch today's rates in the background on startup to populate currencies."""
+        target_date = date.today()
 
+        def worker():
+            if self.rates_service is None:
+                return
+            try:
+                res = self.rates_service.get_rates(target_date)
+                self._queue.put(lambda: self._on_rates_loaded(res))
+            except Exception:
+                # Silent failure on startup; user will see errors if they click Convert
+                pass
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_rates_loaded(self, rates_result: RatesResult) -> None:
+        self.current_rates_result = rates_result
+        self._update_currencies_from_rates(rates_result.rates)
+
+    def _update_currencies_from_rates(self, rate_set: RateSet) -> None:
+        ordered = order_currencies(list(rate_set.currencies.keys()))
+        self.set_currency_choices(ordered)
+
+    def _on_convert_clicked(self) -> None:
+        self.validation_error_var.set("")
+        self.status_message_var.set("")
+        self.hide_cache_offer()
+
+        raw_amount = self.amount_var.get()
         try:
             parsed_amount = parse_amount(raw_amount)
         except ValidationError as err:
@@ -370,30 +460,157 @@ class ConverterApp:
             self._clear_results()
             return
 
-        # If rates_service is provided, trigger conversion workflow (implemented in Phase 4)
-        if self.rates_service is not None and self.converter is not None:
-            self._execute_conversion(parsed_amount)
+        date_str = self.date_var.get().strip()
+        try:
+            target_date = datetime.strptime(date_str, "%d.%m.%Y").date()
+        except ValueError:
+            self.validation_error_var.set("Invalid date format. Please use DD.MM.YYYY.")
+            self._clear_results()
+            return
 
-    def _execute_conversion(self, amount: Decimal) -> None:
-        # Placeholder for Phase 4 integration
-        pass
+        from_code = self.from_currency_var.get().strip()
+        to_code = self.to_currency_var.get().strip()
+
+        if not from_code or not to_code:
+            self.validation_error_var.set("Please select both source and target currencies.")
+            self._clear_results()
+            return
+
+        # If rates_service is available, perform rate lookup in background
+        if self.rates_service is not None:
+            self._perform_conversion_flow(parsed_amount, from_code, to_code, target_date)
+        elif self.current_rates_result is not None:
+            # Immediate conversion with existing rates
+            try:
+                conv = convert(parsed_amount, from_code, to_code, self.current_rates_result.rates)
+                self._display_conversion(conv, self.current_rates_result)
+            except Exception as exc:
+                self.validation_error_var.set(str(exc))
+                self._clear_results()
+
+    def _perform_conversion_flow(
+        self,
+        amount: Decimal,
+        from_code: str,
+        to_code: str,
+        target_date: date,
+    ) -> None:
+        self.status_message_var.set("Fetching official exchange rates...")
+
+        def worker():
+            try:
+                rates_result = self.rates_service.get_rates(target_date)
+                conv = convert(amount, from_code, to_code, rates_result.rates)
+                self._queue.put(lambda: self._on_conversion_success(conv, rates_result))
+            except (NoRatesFoundError, InvalidDataError) as exc:
+                err_msg = str(exc)
+                self._queue.put(lambda: self._on_conversion_error(err_msg))
+            except SourceUnavailableError as exc:
+                err_msg = str(exc)
+                self._queue.put(
+                    lambda: self._handle_source_unavailable(err_msg, amount, from_code, to_code)
+                )
+            except Exception as exc:
+                err_msg = str(exc)
+                self._queue.put(lambda: self._on_conversion_error(f"Error: {err_msg}"))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_conversion_success(self, conv: Conversion, rates_result: RatesResult) -> None:
+        self.status_message_var.set("")
+        self.validation_error_var.set("")
+        self.current_rates_result = rates_result
+        self._update_currencies_from_rates(rates_result.rates)
+        self._display_conversion(conv, rates_result)
+
+    def _display_conversion(self, conv: Conversion, rates_result: RatesResult) -> None:
+        self.result_main_var.set(
+            f"{conv.amount} {conv.from_code} = {conv.result_formatted} {conv.to_code}"
+        )
+        self.result_reverse_var.set(
+            f"1 {conv.to_code} = {conv.reverse_rate_formatted} {conv.from_code}"
+        )
+        self.result_provenance_var.set(rates_result.provenance_label)
+        if rates_result.notice:
+            self.result_notice_var.set(rates_result.notice)
+        else:
+            self.result_notice_var.set("")
+
+    def _on_conversion_error(self, message: str) -> None:
+        self.status_message_var.set("")
+        self.validation_error_var.set(message)
+        self._clear_results()
+
+    def _handle_source_unavailable(
+        self,
+        err_msg: str,
+        amount: Decimal,
+        from_code: str,
+        to_code: str,
+    ) -> None:
+        self.status_message_var.set("")
+        self._clear_results()
+
+        # Check if cache is available
+        cached_rate_set = None
+        if self.rates_service is not None and getattr(self.rates_service, "cache", None) is not None:
+            try:
+                cached_rate_set = self.rates_service.cache.load()
+            except Exception:
+                cached_rate_set = None
+
+        if cached_rate_set is not None:
+            self._cached_rate_set_to_offer = cached_rate_set
+            self._pending_conversion_args = (amount, from_code, to_code)
+            cached_date_str = cached_rate_set.date.strftime("%d.%m.%Y")
+            offer_text = (
+                f"BNM rate source is unavailable ({err_msg}).\n"
+                f"Saved rates from {cached_date_str} are available. Use saved rates?"
+            )
+            self.validation_error_var.set(f"Connection error: {err_msg}")
+            self.show_cache_offer(offer_text, self._on_accept_cache)
+        else:
+            self.validation_error_var.set(
+                f"Cannot reach BNM exchange rate service ({err_msg}). No cached rates available."
+            )
 
     def _on_accept_cache(self) -> None:
-        # Placeholder for Phase 6 offline flow
-        pass
+        if self._cached_rate_set_to_offer is None or not hasattr(self, "_pending_conversion_args"):
+            self.hide_cache_offer()
+            return
+
+        rate_set = self._cached_rate_set_to_offer
+        amount, from_code, to_code = self._pending_conversion_args
+        self.hide_cache_offer()
+
+        cached_result = RatesResult(
+            rates=rate_set,
+            date=rate_set.date,
+            source="cache",
+            is_cached=True,
+            notice="Using offline saved rates.",
+        )
+        try:
+            conv = convert(amount, from_code, to_code, rate_set)
+            self._display_conversion(conv, cached_result)
+            self.validation_error_var.set("")
+        except Exception as exc:
+            self.validation_error_var.set(f"Conversion with cached rates failed: {exc}")
 
     def _on_decline_cache(self) -> None:
-        self.cache_prompt_frame.pack_forget()
+        self.hide_cache_offer()
+        self._cached_rate_set_to_offer = None
+        self.validation_error_var.set("Rates unavailable: online connection failed and cached rates were declined.")
 
     def set_currency_choices(self, currencies: list[str]) -> None:
         """Update available currencies in selectors, preserving popular ordering."""
-        self.available_currencies = list(currencies)
+        ordered = order_currencies(currencies)
+        self.available_currencies = ordered
         self.from_combo["values"] = self.available_currencies
         self.to_combo["values"] = self.available_currencies
 
     def show_cache_offer(self, message: str, on_accept: Callable[[], None]) -> None:
         self.cache_prompt_label.configure(text=message)
-        self._cache_accept_callback = on_accept
         self.cache_prompt_frame.pack(fill=tk.X, pady=(0, 10), before=self.result_card)
 
     def hide_cache_offer(self) -> None:

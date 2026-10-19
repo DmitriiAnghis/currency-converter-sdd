@@ -80,14 +80,13 @@ def test_parse_amount_malformed_and_mixed_separators_raises(malformed_input):
         parse_amount(malformed_input)
 
 
-def test_form_enables_conversion_only_when_all_fields_filled():
+def test_form_enables_conversion_only_when_all_fields_filled(tk_session_root):
     import tkinter as tk
     from converter.gui import ConverterApp
 
-    root = tk.Tk()
+    win = tk.Toplevel(tk_session_root)
     try:
-        root.withdraw()
-        app = ConverterApp(root)
+        app = ConverterApp(win)
 
         # Initially, amount is empty, currencies are unselected -> disabled
         assert app.convert_button.instate(["disabled"])
@@ -108,17 +107,16 @@ def test_form_enables_conversion_only_when_all_fields_filled():
         app.amount_var.set("")
         assert app.convert_button.instate(["disabled"])
     finally:
-        root.destroy()
+        win.destroy()
 
 
-def test_form_shows_validation_error_on_invalid_amount():
+def test_form_shows_validation_error_on_invalid_amount(tk_session_root):
     import tkinter as tk
     from converter.gui import ConverterApp
 
-    root = tk.Tk()
+    win = tk.Toplevel(tk_session_root)
     try:
-        root.withdraw()
-        app = ConverterApp(root)
+        app = ConverterApp(win)
         app.from_currency_var.set("EUR")
         app.to_currency_var.set("MDL")
 
@@ -135,5 +133,5 @@ def test_form_shows_validation_error_on_invalid_amount():
         app._on_convert_clicked()
         assert app.validation_error_var.get() == ""
     finally:
-        root.destroy()
+        win.destroy()
 
