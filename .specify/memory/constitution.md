@@ -1,50 +1,73 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+Sync Impact Report
+Version change: unversioned scaffold -> 1.0.0
+Modified principles:
+- Template principle 1 (unnamed) -> I. Python Desktop Application
+- Template principle 2 (unnamed) -> II. GUI-Independent Core
+- Template principle 3 (unnamed) -> III. Resilient Offline Operation
+- Template principle 4 (unnamed) -> IV. Exact Monetary Arithmetic
+- Template principle 5 (unnamed) -> V. Test-First Quality
+Added sections: Additional Constraints; Development Workflow
+Removed sections: None
+Follow-up TODO: Record the original ratification date.
+-->
+# Currency Converter Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Python Desktop Application
+The application MUST use Python 3.12 and a Tkinter desktop GUI; it MUST NOT provide a console UI.
+Use the Python standard library by default. Non-standard dependencies are limited to requests or
+httpx for HTTP access and pytest for tests.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. GUI-Independent Core
+The rate source client, XML parser, cache, conversion logic, and validation MUST be separate from
+the GUI and MUST NOT import GUI modules. Parsing, conversion, and validation logic MUST be pure;
+the rate client and cache MUST encapsulate network and filesystem I/O. The GUI MUST call these
+modules rather than implement their responsibilities.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Resilient Offline Operation
+Recoverable network, parsing, and file errors MUST NOT terminate the application. The application
+MUST show the user a clear message when these errors occur. The last successful source response
+MUST be cached on disk and retained across restarts. Whenever cached data is used, its date MUST
+be shown to the user.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Exact Monetary Arithmetic
+Conversion calculations MUST use `decimal.Decimal`. Rates MUST retain the precision supplied by
+the source; conversion results MUST be rounded to two decimal places using a documented and
+consistent rounding rule.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. Test-First Quality
+Every GUI-independent core module MUST have pytest unit tests. Tests MUST be written before
+implementation of the behavior they cover. The complete test suite MUST run with
+`python -m pytest`, and the README MUST document this command.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+## Additional Constraints
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+The runtime dependency limit in Principle I applies to production and test dependencies. A GUI
+dependency MUST NOT be introduced outside Tkinter. The separation in Principle II applies to all
+modules: GUI code owns presentation and user interaction, while non-GUI modules own source access,
+XML parsing, caching, conversion, and input validation.
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+## Development Workflow
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+Work MUST use a separate Git branch for each spec, implementation, and tests stage. Commits MUST
+have meaningful messages. Changes MUST be merged into `main` only through a Pull Request.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+This constitution governs project decisions and supersedes conflicting informal practices.
+Amendments MUST be proposed in a Pull Request with their rationale and impact on existing
+principles. A change MUST NOT be treated as an approved amendment until the Pull Request is
+reviewed and merged.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+Constitution versions use semantic versioning. Increment MAJOR for backward-incompatible changes
+to principles or governance, MINOR for new principles or materially expanded requirements, and
+PATCH for clarifications and non-semantic edits. Update the version and last-amended date whenever
+an amendment is merged.
+
+Every Pull Request and review MUST check relevant changes for compliance with this constitution.
+If a proposal conflicts with a principle, resolve the conflict by amending the constitution
+through its Pull Request process before merging the implementation.
+
+**Version**: 1.0.0 | **Ratified**: TODO(RATIFICATION_DATE): original adoption date not recorded | **Last Amended**: 2026-10-19
