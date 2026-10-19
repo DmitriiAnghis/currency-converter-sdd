@@ -2,6 +2,7 @@
 
 from datetime import date
 from decimal import Decimal
+from typing import Optional
 import pytest
 
 from converter.bnm_client import DateUnavailableError, SourceUnavailableError
