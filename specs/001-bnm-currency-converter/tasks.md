@@ -93,12 +93,12 @@ ten-day boundary, no-rate exhaustion, and malformed response reporting.
 
 ### Tests for User Story 2
 
-- [ ] T017 [US2] Add fake-client tests for requested-date success, one-day-at-a-time fallback, HTTP 404 fallback, exactly ten days of lookback, exhaustion, and malformed data in `tests/test_rates_service.py`
+- [x] T017 [US2] Add fake-client tests for requested-date success, one-day-at-a-time fallback, HTTP 404 fallback, exactly ten days of lookback, exhaustion, and malformed data in `tests/test_rates_service.py`
 
 ### Implementation for User Story 2
 
-- [ ] T018 [US2] Extend `src/converter/rates_service.py` to check the selected date and then up to ten earlier calendar dates, treating BNM HTTP 404 and valid empty rate sets as no-rates dates, stopping at the first valid set, and returning the actual date plus a fallback notice
-- [ ] T019 [US2] Update `src/converter/gui.py` to display the fallback notice and actual effective date, and to report lookback exhaustion without displaying a conversion
+- [x] T018 [US2] Extend `src/converter/rates_service.py` to check the selected date and then up to ten earlier calendar dates, treating BNM HTTP 404 and valid empty rate sets as no-rates dates, stopping at the first valid set, and returning the actual date plus a fallback notice
+- [x] T019 [US2] Update `src/converter/gui.py` to display the fallback notice and actual effective date, and to report lookback exhaustion without displaying a conversion
 
 **Checkpoint**: Date lookup uses the first available date in the specified window and never
 mislabels it as the requested date.

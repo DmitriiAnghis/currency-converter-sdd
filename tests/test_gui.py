@@ -93,3 +93,73 @@ def test_gui_shows_error_on_malformed_data(tk_session_root):
         assert app.result_main_var.get() == ""
     finally:
         win.destroy()
+
+
+def test_gui_displays_fallback_notice_and_actual_date(tk_session_root):
+    sample_rates = {
+        "MDL": Currency(code="MDL", name="Moldovan Leu", nominal=1, value_mdl=Decimal("1")),
+        "EUR": Currency(code="EUR", name="Euro", nominal=1, value_mdl=Decimal("19.5000")),
+    }
+    rate_set = RateSet(date=date(2026, 10, 18), currencies=sample_rates)
+    fallback_notice = "No rates published for 19.10.2026; using official rates from 18.10.2026."
+
+    class FallbackFakeRatesService:
+        def get_rates(self, target_date: date) -> RatesResult:
+            return RatesResult(
+                rates=rate_set,
+                date=rate_set.date,
+                source="bnm",
+                is_cached=False,
+                notice=fallback_notice,
+            )
+
+    win = tk.Toplevel(tk_session_root)
+    try:
+        app = ConverterApp(win, rates_service=FallbackFakeRatesService())
+        app.amount_var.set("100")
+        app.from_currency_var.set("EUR")
+        app.to_currency_var.set("MDL")
+        app.date_var.set("19.10.2026")
+
+        app._on_convert_clicked()
+
+        for _ in range(20):
+            win.update()
+            if app.result_notice_var.get():
+                break
+            time.sleep(0.05)
+
+        assert "18.10.2026" in app.result_provenance_var.get()
+        assert app.result_notice_var.get() == fallback_notice
+        assert "100 EUR = 1950.00 MDL" == app.result_main_var.get()
+    finally:
+        win.destroy()
+
+
+def test_gui_reports_lookback_exhaustion_without_conversion(tk_session_root):
+    from converter.rates_service import NoRatesFoundError
+
+    service = ImmediateFakeRatesService(
+        error=NoRatesFoundError("No rates found for 19.10.2026 or the 10-day lookback period.")
+    )
+
+    win = tk.Toplevel(tk_session_root)
+    try:
+        app = ConverterApp(win, rates_service=service)
+        app.amount_var.set("100")
+        app.from_currency_var.set("EUR")
+        app.to_currency_var.set("MDL")
+        app.date_var.set("19.10.2026")
+
+        app._on_convert_clicked()
+
+        for _ in range(20):
+            win.update()
+            if app.validation_error_var.get():
+                break
+            time.sleep(0.05)
+
+        assert "lookback period" in app.validation_error_var.get()
+        assert app.result_main_var.get() == ""
+    finally:
+        win.destroy()

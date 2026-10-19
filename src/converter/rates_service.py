@@ -1,7 +1,7 @@
 """Service coordinating rate retrieval, date fallback, and caching."""
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Optional
 
 from converter.bnm_client import (
@@ -63,37 +63,59 @@ class RatesService:
         self.cache = cache
 
     def get_rates(self, target_date: date) -> RatesResult:
-        """Retrieve rates for target_date.
+        """Retrieve rates for target_date or up to 10 earlier calendar dates.
 
-        In Phase 4, retrieves rates for a single date.
-        Extended in Phase 5 for 10-day fallback and in Phase 6 for offline cache.
+        Checks target_date and then steps backward one calendar day at a time, up
+        to 10 days earlier. Uses the first valid non-empty rate set found.
+
+        Raises:
+            NoRatesFoundError: If no rates are found in the 10-day lookback period.
+            InvalidDataError: If the source returns malformed XML or invalid data.
+            SourceUnavailableError: If the BNM source cannot be reached.
         """
-        try:
-            xml_text = self.client.fetch_rates(target_date)
-        except DateUnavailableError as exc:
-            raise NoRatesFoundError(f"No rates found for {target_date.strftime('%d.%m.%Y')}") from exc
-        except SourceUnavailableError:
-            raise
-
-        try:
-            rate_set = parse_bnm_xml(xml_text)
-        except EmptyResponse as exc:
-            raise NoRatesFoundError(f"No rates found in response for {target_date.strftime('%d.%m.%Y')}") from exc
-        except InvalidResponse as exc:
-            raise InvalidDataError(f"Malformed or invalid rate data: {exc}") from exc
-
-        # Save to cache if cache is provided
-        if self.cache is not None:
+        for offset in range(11):
+            check_date = target_date - timedelta(days=offset)
             try:
-                self.cache.save(rate_set)
-            except Exception:
-                # Log or ignore cache save failure so conversion still succeeds
-                pass
+                xml_text = self.client.fetch_rates(check_date)
+            except DateUnavailableError:
+                # 404: date has no rates, continue to earlier date
+                continue
+            except SourceUnavailableError:
+                # Network or server failure: do not continue fallback
+                raise
 
-        return RatesResult(
-            rates=rate_set,
-            date=rate_set.date,
-            source="bnm",
-            is_cached=False,
-            notice=None,
+            try:
+                rate_set = parse_bnm_xml(xml_text)
+            except EmptyResponse:
+                # Valid XML with 0 Valute entries: continue to earlier date
+                continue
+            except InvalidResponse as exc:
+                # Malformed XML or structurally invalid rates: report error immediately
+                raise InvalidDataError(f"Malformed or invalid rate data from BNM: {exc}") from exc
+
+            # Valid rate set found!
+            notice = None
+            if offset > 0:
+                notice = (
+                    f"No rates published for {target_date.strftime('%d.%m.%Y')}; "
+                    f"using official rates from {rate_set.date.strftime('%d.%m.%Y')}."
+                )
+
+            # Persist to cache if cache is configured
+            if self.cache is not None:
+                try:
+                    self.cache.save(rate_set)
+                except Exception:
+                    pass
+
+            return RatesResult(
+                rates=rate_set,
+                date=rate_set.date,
+                source="bnm",
+                is_cached=False,
+                notice=notice,
+            )
+
+        raise NoRatesFoundError(
+            f"No rates found for {target_date.strftime('%d.%m.%Y')} or the 10-day lookback period."
         )
