@@ -37,6 +37,8 @@ currencies, convert, and verify the displayed result, reverse rate, and provenan
 5. **Given** the conversion form is opened, **When** its initial state is displayed, **Then** the
    rate date is today and available currencies include MDL and every currency in the BNM rates,
    with EUR, USD, RON, UAH, RUB, and GBP listed first when available.
+6. **Given** rates are being fetched, **When** the request is delayed, **Then** the user can
+   continue editing the form and the window continues repainting without waiting for the request.
 
 ---
 
@@ -156,8 +158,9 @@ produced and an actionable validation message is shown.
 - **FR-009**: Selecting the same currency for both sides MUST produce the entered amount as the
   result and a reverse rate of 1, without an error.
 - **FR-010**: The application MUST display the converted amount to two decimal places and show the
-  reverse rate, expressed as source-currency units per one target-currency unit. Exchange rates
-  MUST retain the precision published by BNM.
+  reverse rate, expressed as source-currency units per one target-currency unit, formatted to
+  four decimal places using half-up rounding. The unrounded reverse rate MUST be retained
+  internally. Exchange rates MUST retain the precision published by BNM.
 - **FR-011**: The application MUST identify the rate date actually used and its provenance. For
   online rates, it MUST display "BNM, official rate for DD.MM.YYYY"; for saved rates, it MUST
   display "cache from DD.MM.YYYY", substituting the actual rate date in each label.
@@ -202,9 +205,10 @@ produced and an actionable validation message is shown.
 - **SC-004**: For any test date with rates available within the lookback period, the application
   selects the first available rate date encountered while checking backward and checks no date
   more than ten days earlier than the selected date.
-- **SC-005**: In offline acceptance tests, the application remains responsive and offers saved
-  rates when present, and reports unavailable rates without a conversion when no saved rates
-  exist.
+- **SC-005**: During a simulated 10-second rate request, the application continues repainting and
+  accepts amount-field edits within 1 second without waiting for the request to finish. In
+  offline acceptance tests, it offers saved rates when present and reports unavailable rates
+  without a conversion when no saved rates exist.
 - **SC-006**: At least 9 out of 10 first-time users in a usability test can identify where to
   enter an amount, choose currencies and a date, and complete a valid conversion without
   assistance.

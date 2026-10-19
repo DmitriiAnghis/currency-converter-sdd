@@ -9,7 +9,7 @@ Modified principles:
 - Template principle 5 (unnamed) -> V. Test-First Quality
 Added sections: Additional Constraints; Development Workflow
 Removed sections: None
-Follow-up TODO: Record the original ratification date.
+Follow-up TODOs: None.
 -->
 # Currency Converter Constitution
 
@@ -70,4 +70,4 @@ Every Pull Request and review MUST check relevant changes for compliance with th
 If a proposal conflicts with a principle, resolve the conflict by amending the constitution
 through its Pull Request process before merging the implementation.
 
-**Version**: 1.0.0 | **Ratified**: TODO(RATIFICATION_DATE): original adoption date not recorded | **Last Amended**: 2026-10-19
+**Version**: 1.0.0 | **Ratified**: 2026-10-19 | **Last Amended**: 2026-10-19

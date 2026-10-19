@@ -34,8 +34,8 @@ environment is Windows
 **Project Type**: Single Python desktop application
 
 **Performance Goals**: Bound each HTTP request to 10 seconds. Keep Tk event handling responsive
-while network work is pending. Conversion and validation use local data and complete without
-noticeable delay.
+while network work is pending. When rates are already loaded, conversion results appear within
+one second; validation completes within one second.
 
 **Constraints**: No console UI; Tkinter is the only GUI toolkit. Use only standard-library
 modules plus `httpx` and `pytest`. GUI-independent modules MUST NOT import GUI modules. Recoverable
