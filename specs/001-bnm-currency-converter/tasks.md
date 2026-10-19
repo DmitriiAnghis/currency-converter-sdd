@@ -130,9 +130,9 @@ user consent and is always identified by its actual date.
 
 **Purpose**: Document, exercise, and verify the complete application.
 
-- [ ] T025 Document installation, `python -m converter`, and `python -m pytest` in `README.md`
-- [ ] T026 Run `python -m pytest` for `tests/` with network access disabled; confirm every GUI-independent core module has unit tests and fix any failures in the affected `src/converter/` and `tests/` files
-- [ ] T027 Validate the runnable online, fallback-date, invalid-input, and offline-cache scenarios from `specs/001-bnm-currency-converter/quickstart.md` against the completed application
+- [x] T025 Document installation, `python -m converter`, and `python -m pytest` in `README.md`
+- [x] T026 Run `python -m pytest` for `tests/` with network access disabled; confirm every GUI-independent core module has unit tests and fix any failures in the affected `src/converter/` and `tests/` files
+- [x] T027 Validate the runnable online, fallback-date, invalid-input, and offline-cache scenarios from `specs/001-bnm-currency-converter/quickstart.md` against the completed application
 
 ## Dependencies & Execution Order
 

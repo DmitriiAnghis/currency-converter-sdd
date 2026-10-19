@@ -23,3 +23,15 @@ def tk_session_root():
         root.destroy()
     except Exception:
         pass
+
+
+@pytest.fixture(autouse=True)
+def disallow_network_access(monkeypatch):
+    """Enforce that no test uses live network connections."""
+    import socket
+
+    def guarded_connect(*args, **kwargs):
+        raise RuntimeError("Tests must not access the live network!")
+
+    monkeypatch.setattr(socket, "create_connection", guarded_connect)
+    monkeypatch.setattr(socket.socket, "connect", guarded_connect)
