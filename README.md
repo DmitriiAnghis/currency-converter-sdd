@@ -9,7 +9,7 @@ Desktop-конвертер валют по официальному курсу *
 [![Tests](https://github.com/DmitriiAnghis/currency-converter-sdd/actions/workflows/tests.yml/badge.svg)](https://github.com/DmitriiAnghis/currency-converter-sdd/actions/workflows/tests.yml)
 ![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
 ![Tkinter](https://img.shields.io/badge/GUI-Tkinter-1E2A4A)
-![Tests](https://img.shields.io/badge/tests-145%20passed-2ea44f)
+![Tests](https://img.shields.io/badge/tests-177%20passed-2ea44f)
 ![Spec Kit](https://img.shields.io/badge/Spec%20Kit-Copilot-6e40c9?logo=github)
 ![Antigravity](https://img.shields.io/badge/agent-Antigravity-4285F4?logo=google&logoColor=white)
 
@@ -29,6 +29,9 @@ Desktop-конвертер валют по официальному курсу *
 - **Дата курса**: если на выбранный день курса нет (выходной, праздник, будущая дата), берётся последний курс за 10 дней, и программа прямо пишет, за какую дату он.
 - **Работа без сети**: последний удачный ответ сохраняется в кэш (`%APPDATA%` на Windows). Если BNM недоступен, программа предлагает посчитать по сохранённому курсу и помечает результат как `cache from …`.
 - **Проверка ввода**: запятая или точка, отказ на пустое, ноль, минус, буквы и смешанные разделители.
+- **История конвертаций**: каждая конвертация сохраняется и переживает перезапуск. Поиск, повтор, удаление строк, очистка, экспорт в CSV.
+- **Экспорт в CSV** истории и таблицы курсов: открывается в Excel без настройки кодировки.
+- **Старт без сети**: если BNM недоступен при запуске, списки валют заполняются из сохранённого курса, а сверху появляется полоса с кнопкой **Retry**.
 - **Окно не зависает**: запрос к BNM идёт в фоновом потоке.
 
 ## 🚀 Быстрый старт
@@ -50,7 +53,8 @@ python -m pytest         # тесты
 | Вкладка | Что делает |
 |---|---|
 | **Converter** | Сумма, валюты «откуда» и «куда» (под ними полное название), кнопка **⇄** меняет их местами. Дата курса, кнопки **◀ Day** (день назад) и **Today**. **Convert** или **Enter** считает, **Esc** очищает результат. Результат в карточке: сумма, обратный курс, источник (зелёная плашка BNM или оранжевая «cache»), предупреждение, если взят курс за другой день. **Copy** копирует результат. |
-| **Rates** | Таблица всех курсов BNM на дату: код, название, номинал, курс в MDL и за 1 единицу. **Поиск** по коду и названию, **Load for date** загружает курсы на дату из формы. Двойной щелчок по строке открывает конвертер с этой валютой. |
+| **Rates** | Таблица всех курсов BNM на дату: код, название, номинал, курс в MDL и за 1 единицу. **Поиск** по коду и названию, **Load for date** загружает курсы на дату из формы, **Export CSV** сохраняет таблицу. Двойной щелчок по строке открывает конвертер с этой валютой. |
+| **History** | Все конвертации, новые сверху, число в названии вкладки. **Поиск** по валюте, сумме и дате. **Repeat** (или двойной щелчок, Enter) заново считает выбранную строку, **Delete** (или клавиша Delete) удаляет выбранные строки, **Clear all** очищает всё после подтверждения в полосе, **Export CSV** сохраняет то, что видно в таблице. Строки, посчитанные по сохранённому курсу, выделены оранжевым. |
 
 - В тёмной шапке видно, какие курсы сейчас загружены: источник, дата и число валют.
 - Ошибки ввода показываются красным прямо под формой.
@@ -73,6 +77,22 @@ python -m pytest         # тесты
 <td><b>Вкладка Rates: все курсы на дату</b><br><img src="docs/screenshots/app/09_rates_tab.png" alt="Курсы"></td>
 <td><b>Поиск по курсам</b><br><img src="docs/screenshots/app/10_rates_search.png" alt="Поиск"></td>
 </tr>
+<tr>
+<td><b>Вкладка History: все конвертации</b><br><img src="docs/screenshots/app/11_history.png" alt="История"></td>
+<td><b>Поиск по истории</b><br><img src="docs/screenshots/app/12_history_search.png" alt="Поиск по истории"></td>
+</tr>
+<tr>
+<td><b>Удалены две строки</b><br><img src="docs/screenshots/app/13_history_deleted.png" alt="Удаление"></td>
+<td><b>Clear all: подтверждение в полосе, не в окне</b><br><img src="docs/screenshots/app/14_history_clear_confirm.png" alt="Очистка"></td>
+</tr>
+<tr>
+<td><b>Экспорт истории в CSV</b><br><img src="docs/screenshots/app/15_history_export.png" alt="Экспорт"></td>
+<td><b>Repeat: строка из истории посчитана заново</b><br><img src="docs/screenshots/app/16_history_repeat.png" alt="Повтор"></td>
+</tr>
+<tr>
+<td><b>Экспорт курсов в CSV</b><br><img src="docs/screenshots/app/17_rates_export.png" alt="Экспорт курсов"></td>
+<td><b>Нет сети и нет кэша</b><br><img src="docs/screenshots/app/08_no_rates.png" alt="Нет курсов"></td>
+</tr>
 </table>
 
 <details>
@@ -90,7 +110,8 @@ python -m pytest         # тесты
 | `/speckit-implement`: все 27 задач из `tasks.md` | **Google Antigravity** | код в `src/converter/` | `implementation` |
 | Тесты на граничные случаи из `spec.md` | вручную (фильтр Gemini остановил агента) | `tests/test_edge_cases.py` и др. | `tests` |
 | Отчёт | | [`REPORT.md`](REPORT.md) | `docs/report` |
-| Новый дизайн окна, README, CI | | вкладки, полосы вместо окон, 19 новых тестов | этот PR |
+| Новый дизайн окна, README, CI | | вкладки, полосы вместо окон, 19 новых тестов | PR #6 |
+| История, экспорт CSV, старт без сети | | вкладка History, 32 новых теста | PR #8 |
 
 <details>
 <summary>🤖 Скриншоты этапов Spec Kit и Antigravity</summary>
@@ -124,8 +145,9 @@ src/converter/
 ├── rates_service.py    поиск курса на 10 дней назад, работа с кэшем
 ├── cache.py            JSON-кэш в папке пользователя
 ├── validation.py       проверка суммы
-└── gui.py              окно Tkinter: вкладки Converter и Rates
-tests/                  145 тестов pytest
+├── history.py          история конвертаций (JSON) и экспорт в CSV
+└── gui.py              окно Tkinter: вкладки Converter, Rates, History
+tests/                  177 тестов pytest
 specs/001-bnm-currency-converter/   спецификация, план, задачи, контракты (Spec Kit)
 .specify/               конституция и шаблоны Spec Kit
 .github/workflows/      тесты и письмо о новых коммитах
