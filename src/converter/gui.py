@@ -6,6 +6,7 @@ One window with tabs; messages appear as banners, never as pop-up windows.
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 import os
+from pathlib import Path
 import queue
 import sys
 import threading
@@ -23,6 +24,7 @@ if "TK_LIBRARY" not in os.environ and os.path.exists(_tk_dir):
 
 from converter.bnm_client import SourceUnavailableError
 from converter.converter import Conversion, convert
+from converter.history import ConversionHistory, HistoryEntry, export_rates_csv
 from converter.parser import RateSet
 from converter.rates_service import (
     InvalidDataError,
@@ -112,6 +114,19 @@ def _setup_styles(root: tk.Misc) -> None:
     style.map("Secondary.TButton",
               background=[("disabled", c["bg"]), ("active", c["secondary_hover"])],
               foreground=[("disabled", c["accent_disabled"])])
+    # Compact buttons for the row under the history table.
+    style.configure("SmallAccent.TButton", font=(FONT, 10, "bold"), padding=(12, 8),
+                    background=c["accent"], foreground="#FFFFFF", borderwidth=0,
+                    focuscolor=c["accent"])
+    style.map("SmallAccent.TButton",
+              background=[("disabled", c["accent_disabled"]), ("active", c["accent_hover"])],
+              foreground=[("disabled", "#FFFFFF")])
+    style.configure("Small.TButton", font=(FONT, 10, "bold"), padding=(10, 8),
+                    background=c["badge_bg"], foreground=c["accent"], borderwidth=0,
+                    focuscolor=c["badge_bg"])
+    style.map("Small.TButton",
+              background=[("disabled", c["bg"]), ("active", c["secondary_hover"])],
+              foreground=[("disabled", c["accent_disabled"])])
     style.configure("Swap.TButton", font=(FONT, 13, "bold"), padding=(10, 4),
                     background=c["badge_bg"], foreground=c["accent"], borderwidth=0,
                     focuscolor=c["badge_bg"])
@@ -172,14 +187,16 @@ def _format_rate(value: Decimal) -> str:
 class ConverterApp:
     """Desktop GUI application for currency conversion.
 
-    One window with two tabs (Converter, Rates). Messages are shown as a banner
-    under the header and as red text under the form, never as pop-up windows.
+    One window with three tabs (Converter, Rates, History). Messages are shown as a
+    banner under the header and as red text under the form, never as pop-up windows.
     """
 
     def __init__(
         self,
         root: Optional[tk.Tk] = None,
         rates_service: Optional[RatesService] = None,
+        history: Optional[ConversionHistory] = None,
+        export_dir: Optional[Path] = None,
     ) -> None:
         self.root = root if root is not None else tk.Tk()
         self.root.title("BNM Currency Converter")
@@ -187,6 +204,9 @@ class ConverterApp:
         self.root.minsize(540, 780)
 
         self.rates_service = rates_service
+        # Without a file the history lives in memory only (tests, demo).
+        self.history = history if history is not None else ConversionHistory(None)
+        self.export_dir = export_dir if export_dir is not None else default_export_dir()
 
         # State variables
         self.amount_var = tk.StringVar()
@@ -203,6 +223,8 @@ class ConverterApp:
         self.header_stats_var = tk.StringVar(value="Official exchange rates from the National Bank of Moldova")
         self.rates_search_var = tk.StringVar()
         self.rates_caption_var = tk.StringVar()
+        self.history_search_var = tk.StringVar()
+        self.history_caption_var = tk.StringVar()
 
         initial_defaults = ["EUR", "USD", "RON", "UAH", "RUB", "GBP", "MDL"]
         self.available_currencies: list[str] = order_currencies(initial_defaults)
@@ -220,6 +242,8 @@ class ConverterApp:
         self._refresh_result_view()
         self._schedule_queue_processing()
 
+        if self.history.load_error:
+            self.notify(self.history.load_error, "warn")
         if self.rates_service is not None:
             self._load_initial_rates()
 
@@ -266,12 +290,15 @@ class ConverterApp:
 
         converter_tab = ttk.Frame(self.notebook, style="Bg.TFrame", padding=(20, 16, 20, 20))
         rates_tab = ttk.Frame(self.notebook, style="Bg.TFrame", padding=(20, 16, 20, 20))
+        self.history_tab = ttk.Frame(self.notebook, style="Bg.TFrame", padding=(20, 16, 20, 20))
         self.notebook.add(converter_tab, text="Converter")
         self.notebook.add(rates_tab, text="Rates")
+        self.notebook.add(self.history_tab, text="History")
 
         self._build_form(converter_tab)
         self._build_result(converter_tab)
         self._build_rates_tab(rates_tab)
+        self._build_history_tab(self.history_tab)
 
     def _build_banner(self) -> None:
         """Notification strip under the header (instead of message boxes)."""
@@ -444,6 +471,9 @@ class ConverterApp:
         self.load_rates_button = ttk.Button(top, text="Load for date", style="Secondary.TButton",
                                             command=self._on_load_rates_clicked)
         self.load_rates_button.pack(side=tk.RIGHT)
+        self.export_rates_button = ttk.Button(top, text="Export CSV", style="Secondary.TButton",
+                                              command=self.export_rates_csv)
+        self.export_rates_button.pack(side=tk.RIGHT, padx=(0, 8))
         tk.Label(card, textvariable=self.rates_caption_var, fg=COLORS["muted"],
                  bg=COLORS["card"], font=(FONT, 9), anchor="w").pack(fill=tk.X, pady=(0, 10))
 
@@ -470,6 +500,60 @@ class ConverterApp:
                size=9).pack(anchor=tk.W, pady=(8, 0))
         self._fill_rates_table()
 
+    def _build_history_tab(self, parent: ttk.Frame) -> None:
+        outer, card = _card(parent)
+        outer.pack(fill=tk.BOTH, expand=True)
+
+        top = ttk.Frame(card, style="Card.TFrame")
+        top.pack(fill=tk.X, pady=(0, 4))
+        _label(top, "Conversion history", size=12, bold=True).pack(side=tk.LEFT)
+        self.history_count_badge = _label(top, "0", "accent", "badge_bg", 9, bold=True,
+                                          padx=8, pady=2)
+        self.history_count_badge.pack(side=tk.LEFT, padx=(8, 0))
+        tk.Label(card, textvariable=self.history_caption_var, fg=COLORS["muted"],
+                 bg=COLORS["card"], font=(FONT, 9), anchor="w").pack(fill=tk.X, pady=(0, 10))
+
+        _field_caption(card, "Search (currency, amount, date)").pack(anchor=tk.W)
+        ttk.Entry(card, textvariable=self.history_search_var).pack(fill=tk.X, pady=(4, 12))
+
+        table = ttk.Frame(card, style="Card.TFrame")
+        table.pack(fill=tk.BOTH, expand=True)
+        columns = ("Time", "Conversion", "Rate date", "Source")
+        widths = (126, 210, 84, 66)
+        self.history_tree = ttk.Treeview(table, columns=columns, show="headings",
+                                         selectmode="extended")
+        for column, width in zip(columns, widths):
+            self.history_tree.heading(column, text=column, anchor="w")
+            self.history_tree.column(column, width=width, anchor="w",
+                                     stretch=column == "Conversion",
+                                     minwidth=50)
+        self.history_tree.tag_configure("alt", background=COLORS["row_alt"])
+        self.history_tree.tag_configure("cache", foreground=COLORS["warn_text"])
+        scroll = ttk.Scrollbar(table, orient="vertical", command=self.history_tree.yview)
+        self.history_tree.configure(yscrollcommand=scroll.set)
+        self.history_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        buttons = ttk.Frame(card, style="Card.TFrame")
+        buttons.pack(fill=tk.X, pady=(10, 0))
+        self.history_repeat_button = ttk.Button(buttons, text="Repeat", style="SmallAccent.TButton",
+                                                command=self.repeat_selected)
+        self.history_repeat_button.pack(side=tk.LEFT)
+        self.history_delete_button = ttk.Button(buttons, text="Delete", style="Small.TButton",
+                                                command=self.delete_selected)
+        self.history_delete_button.pack(side=tk.LEFT, padx=(8, 0))
+        self.history_clear_button = ttk.Button(buttons, text="Clear all",
+                                               style="Small.TButton",
+                                               command=self.ask_clear_history)
+        self.history_clear_button.pack(side=tk.LEFT, padx=(8, 0))
+        self.history_export_button = ttk.Button(buttons, text="Export CSV",
+                                                style="Small.TButton",
+                                                command=self.export_history_csv)
+        self.history_export_button.pack(side=tk.RIGHT)
+        _label(card, "Double-click or Enter repeats a conversion, Delete removes selected rows.",
+               "muted", size=9).pack(anchor=tk.W, pady=(8, 0))
+        self._fill_history_table()
+
     def _bind_events(self) -> None:
         self.amount_var.trace_add("write", lambda *_: self._on_field_changed())
         self.from_currency_var.trace_add("write", lambda *_: self._on_field_changed())
@@ -482,6 +566,11 @@ class ConverterApp:
         self.rates_search_var.trace_add("write", lambda *_: self._fill_rates_table())
         self.rates_tree.bind("<Double-1>", self._on_rate_row_activated)
         self.rates_tree.bind("<Return>", self._on_rate_row_activated)
+        self.history_search_var.trace_add("write", lambda *_: self._fill_history_table())
+        self.history_tree.bind("<Double-1>", lambda _e: self.repeat_selected())
+        self.history_tree.bind("<Return>", lambda _e: self.repeat_selected())
+        self.history_tree.bind("<Delete>", lambda _e: self.delete_selected())
+        self.history_tree.bind("<<TreeviewSelect>>", lambda _e: self._update_history_buttons())
         for widget in (self.amount_entry, self.date_entry, self.from_combo, self.to_combo):
             widget.bind("<Return>", self._on_enter_pressed)
         self.root.bind("<Escape>", lambda _e: self._clear_form_result())
@@ -689,15 +778,41 @@ class ConverterApp:
             try:
                 res = self.rates_service.get_rates(target_date)
                 self._queue.put(lambda: self._on_rates_loaded(res))
-            except Exception:
-                # Silent failure on startup; user will see errors if they click Convert
-                pass
+            except Exception as exc:
+                # No network on startup: fill the currency lists from the saved rates
+                # (FR-014/FR-017) and say so in the banner instead of failing silently.
+                msg = str(exc)
+                self._queue.put(lambda: self._on_initial_load_failed(msg))
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _on_initial_load_failed(self, message: str) -> None:
+        cache = getattr(self.rates_service, "cache", None)
+        rate_set = None
+        if cache is not None:
+            try:
+                rate_set = cache.load()
+            except Exception:
+                rate_set = None
+        if rate_set is None:
+            self.notify(f"BNM is unavailable ({message}). Rates will be loaded on Convert.",
+                        "warn", action=self._load_initial_rates, action_text="Retry")
+            return
+        self._on_rates_loaded(RatesResult(rates=rate_set, date=rate_set.date, source="cache",
+                                          is_cached=True, notice="Using offline saved rates."))
+        self.notify(f"BNM is unavailable: currency lists are filled from saved rates of "
+                    f"{rate_set.date:%d.%m.%Y}.", "warn", action=self._load_initial_rates,
+                    action_text="Retry")
 
     def _on_rates_loaded(self, rates_result: RatesResult) -> None:
         self.current_rates_result = rates_result
         self._update_currencies_from_rates(rates_result.rates)
+        # Sensible default pair on first load: EUR -> MDL.
+        if not self.from_currency_var.get() and not self.to_currency_var.get():
+            currencies = rates_result.rates.currencies
+            if "EUR" in currencies and "MDL" in currencies:
+                self.from_currency_var.set("EUR")
+                self.to_currency_var.set("MDL")
         self._update_header_stats()
         self._update_currency_names()
         self._fill_rates_table()
@@ -800,6 +915,7 @@ class ConverterApp:
         self.result_main_var.set(
             f"{conv.amount} {conv.from_code} = {conv.result_formatted} {conv.to_code}"
         )
+        self._record_history(conv)
 
     def _on_conversion_error(self, message: str) -> None:
         self._set_busy(False)
@@ -886,3 +1002,124 @@ class ConverterApp:
 
     def hide_cache_offer(self) -> None:
         self.cache_prompt_frame.pack_forget()
+
+    # --- History tab ---------------------------------------------------------
+
+    def _record_history(self, conv: Conversion) -> None:
+        try:
+            self.history.add(conv)
+        except OSError as exc:  # disk problem: the conversion itself is still shown
+            self.notify(f"History not saved: {exc}", "warn")
+        self._fill_history_table()
+
+    def _fill_history_table(self) -> None:
+        tree = self.history_tree
+        tree.delete(*tree.get_children())
+        entries = self.history.search(self.history_search_var.get())
+        for i, entry in enumerate(entries):
+            tags = []
+            if i % 2:
+                tags.append("alt")
+            if entry.source == "cache":
+                tags.append("cache")
+            tree.insert("", tk.END, iid=str(entry.id), tags=tuple(tags), values=(
+                entry.time, entry.text, entry.rate_date, entry.source))
+        total = len(self.history)
+        self.history_count_badge.configure(text=str(len(entries)))
+        self.notebook.tab(self.history_tab, text=f"History ({total})" if total else "History")
+        if total == 0:
+            self.history_caption_var.set("No conversions yet. Each conversion is saved here.")
+        elif len(entries) != total:
+            self.history_caption_var.set(f"Found {len(entries)} of {total}.")
+        else:
+            self.history_caption_var.set(f"{total} saved, newest first.")
+        self._update_history_buttons()
+
+    def _selected_history_ids(self) -> list[int]:
+        return [int(iid) for iid in self.history_tree.selection()]
+
+    def _update_history_buttons(self) -> None:
+        selected = self._selected_history_ids()
+        self.history_repeat_button.state(["!disabled"] if len(selected) == 1 else ["disabled"])
+        self.history_delete_button.state(["!disabled"] if selected else ["disabled"])
+        has_rows = len(self.history) > 0
+        for button in (self.history_clear_button, self.history_export_button):
+            button.state(["!disabled"] if has_rows else ["disabled"])
+
+    def repeat_selected(self) -> None:
+        """Fill the form from the selected row and convert again at today's rate."""
+        selected = self._selected_history_ids()
+        if len(selected) != 1:
+            return
+        entry = self.history.get(selected[0])
+        if entry is None:
+            return
+        self.amount_var.set(entry.amount)
+        self.from_currency_var.set(entry.from_code)
+        self.to_currency_var.set(entry.to_code)
+        self.date_var.set(entry.rate_date)
+        self.notebook.select(0)
+        self._on_convert_clicked()
+
+    def delete_selected(self) -> None:
+        selected = self._selected_history_ids()
+        if not selected:
+            return
+        removed = self.history.delete(selected)
+        self._fill_history_table()
+        self.notify(f"Deleted {removed} {'row' if removed == 1 else 'rows'} from the history.")
+
+    def ask_clear_history(self) -> None:
+        """Confirmation in the banner, not in a pop-up."""
+        total = len(self.history)
+        if not total:
+            return
+        self.notify(f"Delete all {total} conversions from the history?", "warn",
+                    action=self.clear_history, action_text="Clear")
+
+    def clear_history(self) -> None:
+        removed = self.history.clear()
+        self._fill_history_table()
+        self.notify(f"History cleared ({removed} removed).")
+
+    def _export_path(self, prefix: str) -> Path:
+        return self.export_dir / f"{prefix}_{datetime.now():%Y%m%d_%H%M%S}.csv"
+
+    def _notify_exported(self, count: int, path: Path) -> None:
+        action = None
+        if hasattr(os, "startfile"):
+            action = lambda: os.startfile(str(path.parent))  # Windows: opens the folder
+        self.notify(f"Saved {count} rows: {path}", action=action, action_text="Open folder")
+
+    def export_history_csv(self) -> None:
+        """Exports what the table shows now (with the search filter)."""
+        entries = self.history.search(self.history_search_var.get())
+        if not entries:
+            self.notify("Nothing to export: the history is empty.", "warn")
+            return
+        path = self._export_path("history")
+        try:
+            count = ConversionHistory.export_csv(entries, path)
+        except OSError as exc:
+            self.notify(f"CSV not saved: {exc}", "error")
+            return
+        self._notify_exported(count, path)
+
+    def export_rates_csv(self) -> None:
+        if self.current_rates_result is None:
+            self.notify("Nothing to export: rates are not loaded yet.", "warn")
+            return
+        rate_set = self.current_rates_result.rates
+        path = self._export_path(f"bnm_rates_{rate_set.date:%Y%m%d}")
+        try:
+            count = export_rates_csv(rate_set, path)
+        except OSError as exc:
+            self.notify(f"CSV not saved: {exc}", "error")
+            return
+        self._notify_exported(count, path)
+
+
+def default_export_dir() -> Path:
+    """CSV files go to Documents (or the home folder if there is none)."""
+    documents = Path.home() / "Documents"
+    return documents if documents.is_dir() else Path.home()

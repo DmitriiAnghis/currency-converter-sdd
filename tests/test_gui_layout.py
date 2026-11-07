@@ -51,9 +51,9 @@ def load(app):
     app._on_rates_loaded(RatesResult(rates=RATES, date=RATES.date, source="bnm"))
 
 
-def test_window_has_converter_and_rates_tabs(app):
+def test_window_has_converter_rates_and_history_tabs(app):
     tabs = [app.notebook.tab(t, "text") for t in app.notebook.tabs()]
-    assert tabs == ["Converter", "Rates"]
+    assert tabs == ["Converter", "Rates", "History"]
 
 
 def test_gui_does_not_use_message_boxes():
